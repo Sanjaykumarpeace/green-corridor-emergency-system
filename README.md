@@ -12,7 +12,8 @@ Predictive system to clear traffic using smart signals and alerts.
 - Emergency dispatch simulation
 - Smart route system
 - Backend API
-- Dashboard
+- Live dashboard + animated city map
+- Local AI assistant (no external API key required)
 
 ## Tech Stack:
 - Frontend: HTML, CSS, JS
@@ -20,11 +21,15 @@ Predictive system to clear traffic using smart signals and alerts.
 
 ### Backend;
 cd backend
-pip install -r requirements.txt
+pip install -r Requirements.txt
 python app.py
 
 ### Frontend:
 Open index.html
+
+### Backend API endpoints:
+- GET /health
+- POST /dispatch
 
 ### Team:-
 - Sanjay (Backend + AI)

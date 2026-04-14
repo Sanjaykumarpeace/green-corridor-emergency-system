@@ -287,10 +287,10 @@ section.active { display: block; }
     LsMapper
   </div>
   <div class="nav-links">
-    <button class="nav-link active" onclick="showSection('dashboard')">Dashboard</button>
-    <button class="nav-link" onclick="showSection('chat')">AI Assistant</button>
-    <button class="nav-link" onclick="showSection('system')">System</button>
-    <button class="nav-link" onclick="showSection('simulate')">Simulate</button>
+    <button class="nav-link active" onclick="showSection('dashboard', event)">Dashboard</button>
+    <button class="nav-link" onclick="showSection('chat', event)">AI Assistant</button>
+    <button class="nav-link" onclick="showSection('system', event)">System</button>
+    <button class="nav-link" onclick="showSection('simulate', event)">Simulate</button>
   </div>
   <div class="nav-status">
     <div class="status-dot"></div>
@@ -426,8 +426,8 @@ section.active { display: block; }
       <div class="sys-card">
         <div class="sys-card-icon">🤖</div>
         <div class="sys-card-title">AI Location Assistant</div>
-        <div class="sys-card-desc">Claude-powered chatbot that detects caller location via GPS, analyzes optimal routes, checks corridor status, and coordinates multi-unit dispatch. Uses real-time geolocation API.</div>
-        <span class="tag ai">AI · CLAUDE</span>
+        <div class="sys-card-desc">In-browser assistant that detects caller location via GPS, explains route and corridor behavior, and coordinates with simulator dispatch status in real time. Uses geolocation + local response logic.</div>
+        <span class="tag ai">AI · LOCAL</span>
       </div>
       <div class="sys-card">
         <div class="sys-card-icon">🛰️</div>

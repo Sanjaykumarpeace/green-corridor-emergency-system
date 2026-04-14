@@ -1,11 +1,10 @@
-<script>
 // NAVIGATION
-function showSection(name) {
+function showSection(name, evt) {
   document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(b => b.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
-  if (event && event.target) {
-    event.target.classList.add('active');
+  if (evt && evt.target) {
+    evt.target.classList.add('active');
   }
 }
 
@@ -72,7 +71,6 @@ const ALERT_EVENTS = [
 ];
 
 let liveAlertCount = 1284;
-let feedItems = [];
 
 function timeNow() {
   const d = new Date();
@@ -169,25 +167,6 @@ setInterval(() => {
 const conversations = [];
 let isTyping = false;
 
-const systemPrompt = `You are LsMapper AI, the emergency coordination assistant for an environment-based ambulance corridor system in Bengaluru, India. You help with:
-- Real-time location analysis and nearest hospital routing
-- Active corridor status and traffic signal control
-- Explaining the multi-layer alert system (infrastructure → SMS → push)
-- Ambulance dispatch coordination
-- System status queries
-
-Key facts about LsMapper:
-- Uses a 1km predictive radius around the ambulance
-- Three alert layers: Infrastructure (smart signals, sirens, LED boards), SMS fallback, App push notifications
-- Works with ZERO data about drivers — infrastructure layer requires no phone/app/internet
-- Shifts from targeting individuals to targeting the ZONE/ENVIRONMENT
-- Currently deployed prototype in Bengaluru with smart traffic light simulation rig
-- Future V2V (vehicle-to-vehicle) broadcast planned
-
-The user's current detected location is: ${locationStr || 'Bengaluru, Karnataka (12.9716° N, 77.5946° E)'}.
-
-Be concise, professional, and helpful. Reference specific Bengaluru locations when relevant (MG Road, Koramangala, Indiranagar, etc.). If location is detected, use it in your response.`;
-
 async function sendChat() {
   const input = document.getElementById('chat-input');
   const msg = input.value.trim();
@@ -244,29 +223,29 @@ async function getAIResponse() {
   isTyping = true;
   showTyping();
   try {
-    const sysWithLoc = systemPrompt;
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': 'sk-YOUR-API-KEY-HERE',
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-1-20250805',
-        max_tokens: 1000,
-        system: sysWithLoc,
-        messages: conversations
-      })
-    });
-    const data = await response.json();
-    const text = data.content?.map(b => b.text || '').join('') || 'Sorry, I encountered an error.';
+    const userMessage = conversations[conversations.length - 1]?.content || '';
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    const lower = userMessage.toLowerCase();
+    let text = '';
+
+    if (lower.includes('location') || lower.includes('locate') || lower.includes('where am i')) {
+      text = `Your current detected location is ${locationStr}.`;
+    } else if (lower.includes('nearest hospital') || lower.includes('hospital') || lower.includes('route')) {
+      text = 'The fastest route depends on the live corridor state. Use the simulator to trigger a dispatch and I will show the active corridor path, ETA, and cleared signals.';
+    } else if (lower.includes('corridor') || lower.includes('signal')) {
+      text = 'Active corridor mode is enabled. The system uses infrastructure alerts first, then SMS fallback, then push notifications, with no driver app required for the core clearance flow.';
+    } else if (lower.includes('how does') || lower.includes('how it works') || lower.includes('system')) {
+      text = 'The system predicts a 1km clearance zone around the ambulance, then clears signals, activates acoustic and visual alerts, and falls back to SMS and push notifications if needed.';
+    } else {
+      text = 'I can help with your location, active corridor status, route analysis, or system behavior. Ask me for the nearest hospital, current location, or how the 1km clearance works.';
+    }
+
     hideTyping();
     conversations.push({ role: 'assistant', content: text });
 
     // Add location card if location query
-    const lowerMsg = conversations[conversations.length - 2]?.content?.toLowerCase() || '';
-    if (lowerMsg.includes('location') || lowerMsg.includes('locate') || lowerMsg.includes('where')) {
+    if (lower.includes('location') || lower.includes('locate') || lower.includes('where am i')) {
       const htmlContent = `${text}<div class="location-card"><div class="loc-label">YOUR LOCATION</div><div class="loc-val">${locationStr}</div></div>`;
       appendMsg('ai', htmlContent, true);
     } else {
@@ -301,91 +280,101 @@ async function runSimulation() {
   if (simRunning) return;
   simRunning = true;
   logCount = 0;
-  const btn = document.getElementById('dispatch-btn');
-  btn.disabled = true;
-  btn.textContent = 'Dispatching…';
-  const body = document.getElementById('log-body');
-  body.innerHTML = '';
-  document.getElementById('log-count').textContent = '0 events';
 
+  const btn = document.getElementById('dispatch-btn');
+  const body = document.getElementById('log-body');
   const origin = document.getElementById('sim-origin').value;
   const dest = document.getElementById('sim-dest').value;
   const radius = document.getElementById('sim-radius-val').textContent;
-  const useInfra = document.getElementById('tog-infra').checked;
-  const useSMS = document.getElementById('tog-sms').checked;
-  const usePush = document.getElementById('tog-push').checked;
+  const useInfra = !!document.getElementById('tog-infra')?.checked;
+  const useSMS = !!document.getElementById('tog-sms')?.checked;
+  const usePush = !!document.getElementById('tog-push')?.checked;
 
-  const setProgress = (p) => document.getElementById('sim-progress').style.width = p + '%';
+  btn.disabled = true;
+  btn.textContent = 'Dispatching…';
+  body.innerHTML = '';
+  document.getElementById('log-count').textContent = '0 events';
 
   const now = () => {
     const d = new Date();
-    return `${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${String(d.getMilliseconds()).slice(0,2)}`;
+    return `${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).slice(0, 2)}`;
   };
 
-  addLog(now(), 'DISPATCH', `SOS received — ${origin} → ${dest}`, 'success', 'infra');
-  setProgress(5); await sleep(400);
+  const setProgress = (value) => {
+    const progress = document.getElementById('sim-progress');
+    if (progress) progress.style.width = `${value}%`;
+  };
 
-  addLog(now(), 'SYSTEM', `Ambulance unit assigned — GPS lock acquired`, 'success', 'infra');
-  setProgress(12); await sleep(500);
+  try {
+    addLog(now(), 'DISPATCH', `SOS received — ${origin} → ${dest}`, 'success', 'infra');
+    setProgress(5);
+    await sleep(300);
 
-  addLog(now(), 'ROUTE', `Predictive corridor computed — ${radius} radius active`, '', 'infra');
-  setProgress(20); await sleep(400);
+    const response = await fetch('http://127.0.0.1:5000/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin, destination: dest, radius })
+    });
 
-  if (useInfra) {
-    addLog(now(), 'SIGNALS', `Junction 1: Signal pre-cleared — green corridor activated`, 'success', 'infra');
-    setProgress(28); await sleep(350);
-    addLog(now(), 'SIREN', `Directional acoustic broadcast — 140dB north corridor`, 'success', 'infra');
-    setProgress(34); await sleep(300);
-    addLog(now(), 'LED', `Roadside board updated: "AMBULANCE APPROACHING →"`, 'success', 'infra');
-    setProgress(40); await sleep(400);
-    addLog(now(), 'SIGNALS', `Junction 2: Cross-traffic halted — path clear`, 'success', 'infra');
-    setProgress(46); await sleep(350);
-    addLog(now(), 'SIGNALS', `Junction 3: Pre-emptive green — 8s advance`, 'success', 'infra');
-    setProgress(52); await sleep(300);
-  } else {
-    addLog(now(), 'INFRA', `Infrastructure layer DISABLED — skipping`, 'warn', 'infra');
-    setProgress(52); await sleep(300);
+    if (!response.ok) {
+      throw new Error(`Dispatch request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    addLog(now(), 'SYSTEM', `Ambulance assigned — ${data.ambulance}`, 'success', 'infra');
+    setProgress(18);
+    await sleep(250);
+
+    addLog(now(), 'ROUTE', `Route locked — ${data.route.join(' → ')}`, '', 'infra');
+    setProgress(40);
+    await sleep(250);
+
+    if (useInfra) {
+      addLog(now(), 'INFRA', `Infrastructure corridor active in ${radius}`, 'success', 'infra');
+      if (typeof window.mapReact === 'function') window.mapReact('Infrastructure', origin);
+    } else {
+      addLog(now(), 'INFRA', 'Infrastructure layer disabled', 'warn', 'infra');
+    }
+
+    if (useSMS) {
+      addLog(now(), 'SMS', `SMS fallback prepared for ${radius} radius`, '', 'sms');
+      if (typeof window.mapReact === 'function') window.mapReact('SMS Layer', origin);
+    } else {
+      addLog(now(), 'SMS', 'SMS layer disabled', 'warn', 'sms');
+    }
+
+    if (usePush) {
+      addLog(now(), 'PUSH', 'Push alerts prepared for nearby app users', '', 'app');
+      if (typeof window.mapReact === 'function') window.mapReact('Push Layer', origin);
+    } else {
+      addLog(now(), 'PUSH', 'Push layer disabled', 'warn', 'app');
+    }
+
+    setProgress(65);
+    await sleep(200);
+
+    addLog(now(), 'ETA', `Estimated arrival — ${data.eta}`, 'success', 'infra');
+    setProgress(70);
+    await sleep(200);
+
+    if (typeof window.mapReact === 'function') {
+      window.mapReact('Dispatch', origin);
+    }
+
+    if (typeof updateUnitCard === 'function') {
+      updateUnitCard(data.ambulance, origin, dest);
+    }
+
+    addLog(now(), 'RESULT', 'Dispatch synchronized with backend', 'success', 'infra');
+    setProgress(100);
+  } catch (err) {
+    console.error('Dispatch simulation failed:', err);
+    addLog(now(), 'ERROR', 'Dispatch failed — backend unavailable', 'err', 'infra');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚑 Dispatch Emergency Unit';
+    simRunning = false;
   }
-
-  if (useSMS) {
-    addLog(now(), 'SMS', `Geo-targeting ${radius} radius — querying phone database`, '', 'sms');
-    setProgress(58); await sleep(500);
-    addLog(now(), 'SMS', `38 numbers found — batch SMS fired (no app required)`, 'success', 'sms');
-    setProgress(64); await sleep(400);
-    addLog(now(), 'SMS', `Delivery: 34/38 confirmed · 4 pending`, '', 'sms');
-    setProgress(68); await sleep(300);
-  } else {
-    addLog(now(), 'SMS', `SMS layer DISABLED`, 'warn', 'sms');
-    setProgress(68); await sleep(300);
-  }
-
-  if (usePush) {
-    addLog(now(), 'PUSH', `App users in radius: 12 — push notification queued`, '', 'app');
-    setProgress(74); await sleep(400);
-    addLog(now(), 'PUSH', `Rich notification delivered: map + ETA shown`, 'success', 'app');
-    setProgress(80); await sleep(300);
-  } else {
-    addLog(now(), 'PUSH', `Push layer DISABLED`, 'warn', 'app');
-    setProgress(80); await sleep(300);
-  }
-
-  addLog(now(), 'TRACK', `Real-time position update — corridor advancing`, '', 'infra');
-  setProgress(86); await sleep(400);
-
-  if (useInfra) {
-    addLog(now(), 'SIGNALS', `Junction 4: Green · Junction 5: Green · Junction 6: Green`, 'success', 'infra');
-    setProgress(92); await sleep(500);
-  }
-
-  addLog(now(), 'ETA', `Estimated arrival: 4m 12s · Path clear`, 'success', 'infra');
-  setProgress(97); await sleep(400);
-
-  addLog(now(), 'RESULT', `✓ PATH CLEARED — All layers executed. Zero driver data required.`, 'success', 'infra');
-  setProgress(100);
-
-  btn.disabled = false;
-  btn.textContent = '🚑 Dispatch Another Unit';
-  simRunning = false;
 }
 
 // ═══════════════════════════════════════════════════
@@ -423,14 +412,11 @@ const SIGNAL_GRID = [
 let mapState = {
   ambX: 0.37, ambY: 0.52,        // ambulance position
   targetX: 0.37, targetY: 0.24,  // current target junction
-  corridorPath: [],               // list of [x,y] segments lit up
   signalStates: {},               // junction key → 'green'|'red'|'amber'
   sirenWaves: [],                 // [{x,y,r,alpha}]
   ledFlash: null,                 // {x,y,text,alpha}
   smsBlast: null,                 // {x,y,r,alpha}
   dispatchPulse: null,            // {x,y,alpha}
-  lastAlert: '',
-  t: 0,
 };
 
 // Init signal states
@@ -447,11 +433,6 @@ const ROUTE_WAYPOINTS = [
 ];
 let waypointIdx = 0;
 let ambSpeed = 0.0012;
-
-// Corridor segments ahead of ambulance
-function computeCorridor(ax,ay,tx,ty) {
-  return [[ax,ay],[tx,ty]];
-}
 
 // Resize canvas to container
 function resizeMap() {
@@ -680,7 +661,6 @@ function drawMap(ts) {
     mapState.ambY += (dy/dist) * ambSpeed;
   }
 
-  mapState.t = ts;
   requestAnimationFrame(drawMap);
 }
 
@@ -744,7 +724,6 @@ function greenifyAhead() {
 
 // ── MAP REACTION TO ALERT EVENTS ─────────────────────
 window.mapReact = function(layer, loc) {
-  const w = W(), h = H();
   // Find junction coords for this location
   let jx = mapState.ambX, jy = mapState.ambY;
   Object.entries(JUNCTIONS).forEach(([name,[xp,yp]]) => {
@@ -820,4 +799,3 @@ window.mapReact = function(layer, loc) {
 // Kick off map rendering
 greenifyAhead();
 requestAnimationFrame(drawMap);
-</script>
