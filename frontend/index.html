@@ -1,18 +1,529 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Green Corridor System</title>
-  <link rel="stylesheet" href="style.css">
-</head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LsMapper — Emergency Response System</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --green: #1D9E75;
+  --green-light: #E1F5EE;
+  --green-dark: #085041;
+  --green-mid: #5DCAA5;
+  --red: #E24B4A;
+  --amber: #EF9F27;
+  --bg: #0a0f0d;
+  --bg2: #111a15;
+  --bg3: #162019;
+  --border: rgba(29,158,117,0.2);
+  --border2: rgba(29,158,117,0.4);
+  --text: #e8f4f0;
+  --text2: #8ab8a8;
+  --text3: #4d7a69;
+  --font: 'Space Grotesk', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; overflow-x: hidden; }
 
+/* NAV */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(10,15,13,0.92); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; height: 56px;
+}
+.nav-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -0.5px; }
+.logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(29,158,117,0.4)} 50%{box-shadow:0 0 0 8px rgba(29,158,117,0)} }
+.nav-links { display: flex; gap: 8px; }
+.nav-link { background: none; border: none; color: var(--text2); font-family: var(--font); font-size: 13px; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+.nav-link:hover, .nav-link.active { background: var(--bg3); color: var(--green); }
+.nav-status { display: flex; align-items: center; gap: 6px; font-size: 12px; font-family: var(--mono); color: var(--green); background: rgba(29,158,117,0.1); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.5s ease-in-out infinite; }
+
+/* SECTIONS */
+section { display: none; padding-top: 56px; }
+section.active { display: block; }
+
+/* HERO / DASHBOARD */
+.hero { padding: 48px 24px 24px; max-width: 1200px; margin: 0 auto; }
+.hero-title { font-size: 48px; font-weight: 700; letter-spacing: -2px; line-height: 1.1; margin-bottom: 8px; }
+.hero-title span { color: var(--green); }
+.hero-sub { color: var(--text2); font-size: 16px; margin-bottom: 32px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 32px; }
+.stat-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px;
+}
+.stat-label { font-size: 11px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.stat-value { font-size: 32px; font-weight: 700; letter-spacing: -1px; }
+.stat-value.green { color: var(--green); }
+.stat-value.red { color: var(--red); }
+.stat-value.amber { color: var(--amber); }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+/* MAP AREA */
+.map-container {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden; position: relative;
+  height: 420px; margin-bottom: 24px;
+}
+.map-header {
+  position: absolute; top: 16px; left: 16px; right: 16px; z-index: 10;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.map-label { font-family: var(--mono); font-size: 11px; color: var(--green); background: rgba(10,15,13,0.8); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); }
+.map-svg { width: 100%; height: 100%; }
+
+/* City Grid Map */
+.road { stroke: var(--bg3); stroke-width: 8; fill: none; }
+.road-sm { stroke: var(--bg3); stroke-width: 4; fill: none; }
+.block { fill: #111c17; }
+.block-alt { fill: #0e1814; }
+.green-corridor { fill: rgba(29,158,117,0.15); stroke: var(--green); stroke-width: 2; stroke-dasharray: 8 4; animation: corridorPulse 2s ease-in-out infinite; }
+@keyframes corridorPulse { 0%,100%{stroke-opacity:0.6;fill-opacity:0.1} 50%{stroke-opacity:1;fill-opacity:0.2} }
+.ambulance-marker { filter: drop-shadow(0 0 12px rgba(29,158,117,0.8)); animation: ambulanceMove 8s linear infinite; }
+@keyframes ambulanceMove {
+  0%   { transform: translate(180px, 340px); }
+  25%  { transform: translate(280px, 340px); }
+  50%  { transform: translate(280px, 220px); }
+  75%  { transform: translate(400px, 220px); }
+  100% { transform: translate(400px, 100px); }
+}
+.radius-ring {
+  fill: rgba(29,158,117,0.05);
+  stroke: rgba(29,158,117,0.3);
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
+  animation: ringPulse 3s ease-in-out infinite;
+}
+@keyframes ringPulse { 0%,100%{r:80px;opacity:0.5} 50%{r:90px;opacity:1} }
+.traffic-red { fill: var(--red); animation: trafficBlink 2s step-end infinite; }
+.traffic-green { fill: var(--green); animation: trafficGreenBlink 2s step-end infinite; }
+@keyframes trafficBlink { 0%,49%{opacity:1} 50%,100%{opacity:0.3} }
+@keyframes trafficGreenBlink { 0%,49%{opacity:0.3} 50%,100%{opacity:1} }
+.car { fill: var(--text3); opacity: 0.7; }
+.car-alert { fill: rgba(29,158,117,0.6); animation: carAlert 1s ease-in-out infinite; }
+@keyframes carAlert { 0%,100%{opacity:0.6} 50%{opacity:1} }
+
+/* ALERT PANEL */
+.panels { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+.alerts-feed { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.feed-title { font-size: 12px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.alert-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(29,158,117,0.08); align-items: flex-start; }
+.alert-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; margin-top: 2px; }
+.alert-icon.green { background: rgba(29,158,117,0.15); color: var(--green); }
+.alert-icon.amber { background: rgba(239,159,39,0.15); color: var(--amber); }
+.alert-icon.red { background: rgba(226,75,74,0.15); color: var(--red); }
+.alert-text { font-size: 13px; line-height: 1.5; }
+.alert-time { font-size: 10px; font-family: var(--mono); color: var(--text3); margin-top: 2px; }
+.info-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(29,158,117,0.08); font-size: 13px; }
+.info-row:last-child { border-bottom: none; }
+.info-key { color: var(--text3); }
+.info-val { color: var(--text); font-family: var(--mono); font-size: 12px; }
+.info-val.green { color: var(--green); }
+
+/* AI CHAT */
+#section-chat { background: var(--bg); }
+.chat-wrap { max-width: 900px; margin: 0 auto; padding: 24px; height: calc(100vh - 56px); display: flex; flex-direction: column; }
+.chat-header { margin-bottom: 20px; }
+.chat-header h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.chat-header p { color: var(--text2); font-size: 13px; margin-top: 4px; }
+.chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; padding-right: 4px; }
+.chat-messages::-webkit-scrollbar { width: 4px; }
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.msg { max-width: 80%; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6; }
+.msg.user { background: rgba(29,158,117,0.15); border: 1px solid var(--border); align-self: flex-end; border-bottom-right-radius: 4px; }
+.msg.ai { background: var(--bg2); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; }
+.msg-label { font-size: 10px; font-family: var(--mono); color: var(--text3); margin-bottom: 6px; }
+.msg.ai .msg-label { color: var(--green); }
+.location-card { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; margin-top: 8px; font-size: 12px; font-family: var(--mono); }
+.location-card .loc-label { color: var(--text3); font-size: 10px; margin-bottom: 4px; }
+.location-card .loc-val { color: var(--green); }
+.chat-input-area { display: flex; gap: 10px; }
+.chat-input {
+  flex: 1; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 16px; color: var(--text);
+  font-family: var(--font); font-size: 14px; outline: none;
+  transition: border-color 0.2s;
+}
+.chat-input:focus { border-color: var(--green); }
+.chat-input::placeholder { color: var(--text3); }
+.chat-send {
+  background: var(--green); color: var(--bg); border: none;
+  border-radius: 10px; padding: 0 20px; font-family: var(--font);
+  font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: all 0.2s; white-space: nowrap;
+}
+.chat-send:hover { background: var(--green-mid); }
+.quick-btns { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.quick-btn { background: var(--bg2); border: 1px solid var(--border); color: var(--text2); font-family: var(--font); font-size: 12px; padding: 6px 12px; border-radius: 20px; cursor: pointer; transition: all 0.2s; }
+.quick-btn:hover { border-color: var(--green); color: var(--green); }
+
+/* SYSTEM PAGE */
+#section-system { padding: 56px 0 0; }
+.sys-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 24px; }
+.sys-title { font-size: 36px; font-weight: 700; letter-spacing: -1px; margin-bottom: 8px; }
+.sys-sub { color: var(--text2); font-size: 15px; margin-bottom: 40px; }
+.sys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
+.sys-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+.sys-card-icon { font-size: 24px; margin-bottom: 12px; }
+.sys-card-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.sys-card-desc { font-size: 13px; color: var(--text2); line-height: 1.6; }
+.tag { display: inline-block; font-size: 10px; font-family: var(--mono); padding: 3px 8px; border-radius: 4px; margin-top: 10px; }
+.tag.fe { background: rgba(29,158,117,0.1); color: var(--green); border: 1px solid var(--border); }
+.tag.be { background: rgba(239,159,39,0.1); color: var(--amber); border: 1px solid rgba(239,159,39,0.3); }
+.tag.ai { background: rgba(93,202,165,0.1); color: var(--green-mid); border: 1px solid rgba(93,202,165,0.3); }
+.layer-pyramid { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 20px; }
+.layer { border-radius: 8px; padding: 14px 20px; margin-bottom: 8px; }
+.layer.l1 { background: rgba(29,158,117,0.25); border: 1px solid var(--green); }
+.layer.l2 { background: rgba(239,159,39,0.15); border: 1px solid rgba(239,159,39,0.4); margin-left: 40px; }
+.layer.l3 { background: rgba(29,158,117,0.08); border: 1px solid var(--border); margin-left: 80px; }
+.layer-title { font-size: 13px; font-weight: 600; }
+.layer-desc { font-size: 11px; color: var(--text2); margin-top: 2px; font-family: var(--mono); }
+
+/* SIMULATE PAGE */
+#section-simulate { padding: 56px 0 0; }
+.sim-wrap { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+.sim-title { font-size: 32px; font-weight: 700; letter-spacing: -1px; margin-bottom: 8px; }
+.sim-sub { color: var(--text2); font-size: 14px; margin-bottom: 32px; }
+.sim-controls { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 24px; }
+.ctrl-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.ctrl-label { font-size: 12px; font-family: var(--mono); color: var(--text3); width: 140px; flex-shrink: 0; }
+.ctrl-input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 13px; padding: 8px 12px; outline: none; }
+.ctrl-select { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 13px; padding: 8px 12px; outline: none; }
+.ctrl-range { flex: 1; accent-color: var(--green); }
+.ctrl-val { font-size: 12px; font-family: var(--mono); color: var(--green); width: 48px; text-align: right; }
+.dispatch-btn {
+  background: var(--green); color: var(--bg); border: none;
+  border-radius: 10px; padding: 14px 32px; font-family: var(--font);
+  font-weight: 700; font-size: 15px; cursor: pointer;
+  transition: all 0.2s; display: block; width: 100%;
+  letter-spacing: -0.3px;
+}
+.dispatch-btn:hover { background: var(--green-mid); transform: translateY(-1px); }
+.dispatch-btn:disabled { background: var(--bg3); color: var(--text3); cursor: not-allowed; transform: none; }
+.sim-log { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.log-header { padding: 14px 20px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center; }
+.log-body { padding: 16px; max-height: 320px; overflow-y: auto; }
+.log-entry { display: flex; gap: 10px; padding: 6px 0; font-size: 12px; font-family: var(--mono); }
+.log-time { color: var(--text3); width: 70px; flex-shrink: 0; }
+.log-channel { width: 80px; flex-shrink: 0; }
+.log-msg { color: var(--text2); }
+.log-msg.success { color: var(--green); }
+.log-msg.warn { color: var(--amber); }
+.log-msg.err { color: var(--red); }
+.badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+.badge.infra { background: rgba(29,158,117,0.15); color: var(--green); }
+.badge.sms { background: rgba(239,159,39,0.15); color: var(--amber); }
+.badge.app { background: rgba(93,202,165,0.1); color: var(--green-mid); }
+.badge.v2v { background: rgba(226,75,74,0.1); color: var(--red); }
+.progress-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin: 16px 0; }
+.progress-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.3s; }
+
+/* typing indicator */
+.typing { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+.typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: typingAnim 1.2s ease-in-out infinite; }
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingAnim { 0%,60%,100%{opacity:0.3;transform:scale(0.8)} 30%{opacity:1;transform:scale(1)} }
+
+/* TOGGLE */
+.tog { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+.tog input { opacity: 0; width: 0; height: 0; }
+.tog-slider { position: absolute; inset: 0; background: var(--bg3); border-radius: 10px; cursor: pointer; border: 1px solid var(--border); transition: 0.2s; }
+.tog-slider:before { content: ''; position: absolute; height: 14px; width: 14px; left: 2px; bottom: 2px; background: var(--text3); border-radius: 50%; transition: 0.2s; }
+.tog input:checked + .tog-slider { background: rgba(29,158,117,0.3); border-color: var(--green); }
+.tog input:checked + .tog-slider:before { transform: translateX(16px); background: var(--green); }
+.ctrl-row label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); cursor: pointer; }
+
+/* LIVE FEED ANIMATIONS */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-12px); background: rgba(29,158,117,0.18); }
+  to   { opacity: 1; transform: translateY(0);      background: transparent; }
+}
+.alert-item-live {
+  display: flex; gap: 10px; padding: 10px 8px;
+  border-bottom: 1px solid rgba(29,158,117,0.08);
+  align-items: flex-start;
+  animation: slideIn 0.5s ease forwards;
+  border-radius: 6px;
+  transition: background 0.3s;
+}
+.alert-item-live:hover { background: rgba(29,158,117,0.05); }
+.flash-border { animation: flashBorder 1s ease; }
+@keyframes flashBorder {
+  0%,100% { border-color: var(--border); }
+  30%      { border-color: var(--green); box-shadow: 0 0 0 2px rgba(29,158,117,0.2); }
+}
+.new-badge {
+  font-size: 9px; font-family: var(--mono); background: rgba(29,158,117,0.2);
+  color: var(--green); padding: 1px 5px; border-radius: 3px;
+  border: 1px solid var(--border); margin-left: 6px; vertical-align: middle;
+  animation: fadeOut 3s ease forwards;
+}
+@keyframes fadeOut { 0%,60%{opacity:1} 100%{opacity:0} }
+.info-val.counting { animation: countFlash 0.3s ease; }
+@keyframes countFlash { 0%,100%{color:var(--green)} 50%{color:#fff} }
+@media (max-width: 768px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .panels { grid-template-columns: 1fr; }
+  .sys-grid { grid-template-columns: 1fr; }
+  .hero-title { font-size: 32px; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
 <body>
 
-<h1>🚑 Green Corridor Dashboard</h1>
+<nav>
+  <div class="nav-logo">
+    <div class="logo-dot"></div>
+    LsMapper
+  </div>
+  <div class="nav-links">
+    <button class="nav-link active" onclick="showSection('dashboard')">Dashboard</button>
+    <button class="nav-link" onclick="showSection('chat')">AI Assistant</button>
+    <button class="nav-link" onclick="showSection('system')">System</button>
+    <button class="nav-link" onclick="showSection('simulate')">Simulate</button>
+  </div>
+  <div class="nav-status">
+    <div class="status-dot"></div>
+    SYSTEM ACTIVE
+  </div>
+</nav>
 
-<button onclick="dispatchEmergency()">Dispatch Ambulance</button>
+<!-- DASHBOARD -->
+<section id="section-dashboard" class="active">
+  <div class="hero">
+    <h1 class="hero-title">Emergency <span>Green Corridor</span><br>System</h1>
+    <p class="hero-sub">Environment-based emergency response — no app install, no user ID, no internet required for drivers.</p>
 
-<div id="output"></div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Active Corridors</div>
+        <div class="stat-value green" id="stat-corridors">3</div>
+        <div class="stat-sub">2 ambulance · 1 fire</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg. Clearance Time</div>
+        <div class="stat-value amber" id="stat-clear">14s</div>
+        <div class="stat-sub">↓ 68% vs traditional</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Signals Controlled</div>
+        <div class="stat-value green" id="stat-signals">47</div>
+        <div class="stat-sub">Live today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Alerts Fired</div>
+        <div class="stat-value" id="stat-alerts">1,284</div>
+        <div class="stat-sub">Acoustic + Visual + SMS</div>
+      </div>
+    </div>
+
+    <div class="map-container">
+      <div class="map-header">
+        <div class="map-label">LIVE · Bengaluru Central Grid</div>
+        <div class="map-label" id="map-event-label" style="color:var(--green);transition:all 0.3s">1km radius active</div>
+      </div>
+      <canvas id="mapCanvas" style="width:100%;height:100%;display:block"></canvas>
+    </div>
+
+    <div class="panels">
+      <div class="alerts-feed">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="feed-title" style="margin-bottom:0">Live Alert Feed</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1s ease-in-out infinite"></div>
+            <span style="font-size:11px;font-family:var(--mono);color:var(--green)" id="live-count">0 alerts today</span>
+          </div>
+        </div>
+        <div id="live-feed" style="max-height:320px;overflow-y:auto;scroll-behavior:smooth"></div>
+      </div>
+      <div>
+        <div class="info-card">
+          <div class="feed-title">Active Unit: AMB-07</div>
+          <div class="info-row"><span class="info-key">Origin</span><span class="info-val">Koramangala</span></div>
+          <div class="info-row"><span class="info-key">Destination</span><span class="info-val">Manipal Hospital</span></div>
+          <div class="info-row"><span class="info-key">ETA</span><span class="info-val green">4m 12s</span></div>
+          <div class="info-row"><span class="info-key">Speed</span><span class="info-val">38 km/h</span></div>
+          <div class="info-row"><span class="info-key">Radius</span><span class="info-val green">1km active</span></div>
+          <div class="info-row"><span class="info-key">Signals ahead</span><span class="info-val green">7 pre-cleared</span></div>
+          <div class="info-row"><span class="info-key">Alert mode</span><span class="info-val green">All layers</span></div>
+          <div class="info-row"><span class="info-key">Data required</span><span class="info-val green">ZERO (infra)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AI CHAT -->
+<section id="section-chat">
+  <div class="chat-wrap">
+    <div class="chat-header">
+      <h2>AI Emergency Assistant</h2>
+      <p>Real-time location detection · Route analysis · System status · Patient coordination</p>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="msg ai">
+        <div class="msg-label">CLEARPATH AI · ONLINE</div>
+        Hello. I'm the LsMapper emergency coordination assistant. I can detect your real-time location, analyze optimal ambulance routes, check corridor status, and answer questions about active emergencies. How can I help?
+        <div class="location-card">
+          <div class="loc-label">DETECTED LOCATION</div>
+          <div class="loc-val" id="ai-loc-display">Locating…</div>
+        </div>
+      </div>
+    </div>
+    <div class="quick-btns">
+      <button class="quick-btn" onclick="sendQuick('What is my current location and nearest hospital?')">📍 Locate me</button>
+      <button class="quick-btn" onclick="sendQuick('Show active corridors near me')">🟢 Active corridors</button>
+      <button class="quick-btn" onclick="sendQuick('What is the fastest route for an ambulance right now?')">🚑 Route analysis</button>
+      <button class="quick-btn" onclick="sendQuick('How does the 1km radius alert system work?')">📡 How it works</button>
+    </div>
+    <div class="chat-input-area">
+      <input class="chat-input" id="chat-input" type="text" placeholder="Ask about location, routes, corridors, or system status…" onkeydown="if(event.key==='Enter')sendChat()"/>
+      <button class="chat-send" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</section>
+
+<!-- SYSTEM -->
+<section id="section-system">
+  <div class="sys-wrap">
+    <h2 class="sys-title">System Architecture</h2>
+    <p class="sys-sub">Full-stack breakdown — frontend, backend, and AI components for the LsMapper emergency response platform.</p>
+    <div class="sys-grid">
+      <div class="sys-card">
+        <div class="sys-card-icon">🗺️</div>
+        <div class="sys-card-title">Live Map Dashboard</div>
+        <div class="sys-card-desc">Real-time ambulance tracking on a city grid. Shows 1km predictive radius, green corridor overlay, signal states, and moving alert zones. Powered by WebSocket updates from backend.</div>
+        <span class="tag fe">FRONTEND</span>
+      </div>
+      <div class="sys-card">
+        <div class="sys-card-icon">📡</div>
+        <div class="sys-card-title">Signal Control API</div>
+        <div class="sys-card-desc">Backend service that pre-emptively switches traffic signals to green along the ambulance's predicted forward path. Integrates with smart-city infrastructure via REST + MQTT. Zero phone interaction required.</div>
+        <span class="tag be">BACKEND</span>
+      </div>
+      <div class="sys-card">
+        <div class="sys-card-icon">🔊</div>
+        <div class="sys-card-title">Acoustic + Visual Layer</div>
+        <div class="sys-card-desc">Triggers directional voice sirens and LED roadside boards in real-time as the ambulance enters the zone. Works for drivers with no phone, no app, no internet — zero data dependency.</div>
+        <span class="tag be">BACKEND</span>
+      </div>
+      <div class="sys-card">
+        <div class="sys-card-icon">💬</div>
+        <div class="sys-card-title">SMS Fallback Engine</div>
+        <div class="sys-card-desc">When partial user data exists, fires geo-targeted SMS to phones in the radius. No app install needed. Gracefully degrades from push notifications → SMS → infrastructure-only.</div>
+        <span class="tag be">BACKEND</span>
+      </div>
+      <div class="sys-card">
+        <div class="sys-card-icon">🤖</div>
+        <div class="sys-card-title">AI Location Assistant</div>
+        <div class="sys-card-desc">Claude-powered chatbot that detects caller location via GPS, analyzes optimal routes, checks corridor status, and coordinates multi-unit dispatch. Uses real-time geolocation API.</div>
+        <span class="tag ai">AI · CLAUDE</span>
+      </div>
+      <div class="sys-card">
+        <div class="sys-card-icon">🛰️</div>
+        <div class="sys-card-title">V2V Broadcast Module</div>
+        <div class="sys-card-desc">Future layer: vehicle-to-vehicle direct broadcast bypassing centralized networks entirely. Simulates disaster-alert models. Transmits to nearby dashboards without internet dependency.</div>
+        <span class="tag fe">FRONTEND</span> <span class="tag be" style="margin-left:4px">BACKEND</span>
+      </div>
+    </div>
+    <div class="layer-pyramid">
+      <div class="feed-title" style="margin-bottom:16px">Alert Hierarchy — Guaranteed Clearance</div>
+      <div class="layer l1">
+        <div class="layer-title">Layer 1 — Universal Reach (Zero Data Required)</div>
+        <div class="layer-desc">Smart signals · Loud sirens · LED road signs · No phone/app/internet needed</div>
+      </div>
+      <div class="layer l2">
+        <div class="layer-title">Layer 2 — Partial Data (SMS Fallback)</div>
+        <div class="layer-desc">Phone number only · Geo-targeted SMS to area · No app install</div>
+      </div>
+      <div class="layer l3">
+        <div class="layer-title">Layer 3 — Full Data (Push Notifications)</div>
+        <div class="layer-desc">App users · Rich push notifications · Real-time updates</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SIMULATE -->
+<section id="section-simulate">
+  <div class="sim-wrap">
+    <h2 class="sim-title">Dispatch Simulator</h2>
+    <p class="sim-sub">Simulate an emergency dispatch and watch the multi-layer alert cascade in real-time.</p>
+    <div class="sim-controls">
+      <div class="ctrl-row">
+        <div class="ctrl-label">Origin</div>
+        <select class="ctrl-select" id="sim-origin">
+          <option>Koramangala (AMB-07)</option>
+          <option>Indiranagar (AMB-03)</option>
+          <option>Jayanagar (AMB-11)</option>
+          <option>Whitefield (AMB-15)</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Destination</div>
+        <select class="ctrl-select" id="sim-dest">
+          <option>Manipal Hospital</option>
+          <option>St. John's Hospital</option>
+          <option>Fortis Hospital</option>
+          <option>Apollo Hospital</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Alert Radius</div>
+        <input type="range" class="ctrl-range" min="500" max="2000" value="1000" id="sim-radius" oninput="document.getElementById('sim-radius-val').textContent=this.value+'m'">
+        <div class="ctrl-val" id="sim-radius-val">1000m</div>
+      </div>
+      <div class="ctrl-row">
+        <label class="ctrl-label" style="width: auto; margin-right: 16px;">
+          <div class="tog">
+            <input type="checkbox" id="tog-infra" checked>
+            <span class="tog-slider"></span>
+          </div>
+        </label>
+        <span>Infrastructure layer (signals + sirens)</span>
+      </div>
+      <div class="ctrl-row">
+        <label class="ctrl-label" style="width: auto; margin-right: 16px;">
+          <div class="tog">
+            <input type="checkbox" id="tog-sms" checked>
+            <span class="tog-slider"></span>
+          </div>
+        </label>
+        <span>SMS fallback</span>
+      </div>
+      <div class="ctrl-row">
+        <label class="ctrl-label" style="width: auto; margin-right: 16px;">
+          <div class="tog">
+            <input type="checkbox" id="tog-push" checked>
+            <span class="tog-slider"></span>
+          </div>
+        </label>
+        <span>Push notifications</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="sim-progress" style="width:0%"></div></div>
+      <button class="dispatch-btn" id="dispatch-btn" onclick="runSimulation()">🚑 Dispatch Emergency Unit</button>
+    </div>
+    <div class="sim-log">
+      <div class="log-header">
+        <span>System Log</span>
+        <span id="log-count">0 events</span>
+      </div>
+      <div class="log-body" id="log-body">
+        <div style="color:var(--text3);font-size:12px;font-family:monospace;padding:8px 0">Awaiting dispatch…</div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <script src="script.js"></script>
 </body>
