@@ -4,6 +4,9 @@ import traceback
 
 app = Flask(__name__)
 CORS(app)
+# ALERT STORAGE & dispatch tracking:
+ALERTS = []
+LAST_DISPATCH = {}
 # CITY MAP (Graph Simulation)
 CITY_MAP = {
     "Koramangala": ["Silk Board", "Indiranagar"],
@@ -34,23 +37,73 @@ def find_route(start, end):
                 queue.append(new_path)
 
     return [start, end]  # fallback
+# AI DECISION ENGINE:
+def ai_signal_decision(distance):
+    if distance == 0:
+        return "GREEN"
+    elif distance == 1:
+        return "GREEN"
+    elif distance == 2:
+        return "PREPARE"
+    else:
+        return "RED"
 
-# SIGNAL CONTROL LOGIC
+# SMART SIGNAL + ZONE AWARE LOGIC
 def get_signals(route):
     signals = []
+
+    # Get zone locations (first 3 points)
+    zone_locations = route[:3]
+
     for i, location in enumerate(route):
+        distance = i
+
+        if location in zone_locations:
+            if distance == 0:
+                state = ai_signal_decision(distance)
+                priority = "HIGH"
+            elif distance == 1:
+                state = ai_signal_decision(distance)
+                priority = "HIGH"
+            else:
+                state = "PREPARE"
+                priority = "MEDIUM"
+        else:
+            state = "RED"
+            priority = "LOW"
+
         signals.append({
             "junction": location,
-            "signal": "GREEN" if i < len(route)-1 else "RED"
+            "signal": state,
+            "priority": priority,
+            "distance": distance,
+            "zone_affected": location in zone_locations
         })
+
     return signals
+# PREDICTIVE DECISION ENGINE
+def predict_next_action(route):
+    if len(route) < 2:
+        return "No prediction available"
+
+    next_location = route[1]
+
+    return f"Prepare clearance at {next_location} and pre-activate signals"
 # ZONE(1km RADIUS SIMULATION):-
-def get_zone(location):
-    return {
-        "center": location,
-        "radius": "1km",
-        "status": "active"
-    }
+# # DYNAMIC ZONE SYSTEM
+def get_zone(route):
+    zones = []
+
+    for i, location in enumerate(route):
+        if i <= 2:  # only near future path
+            zones.append({
+                "center": location,
+                "radius": "1km",
+                "status": "ACTIVE",
+                "priority": "HIGH" if i == 0 else "MEDIUM"
+            })
+
+    return zones
 @app.route('/', methods=['GET'])
 def home():
     return {"status": "Backend Running...", "version": "1.0.0"}
@@ -59,7 +112,7 @@ def home():
 def dispatch():
     try:
         data = request.json
-        
+
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
@@ -69,16 +122,46 @@ def dispatch():
         if not origin or not destination:
             return jsonify({"error": "Origin and destination are required"}), 400
 
-        route = [origin, "Signal 1", "Signal 2", destination]
+        route = find_route(origin, destination)
         eta = f"{len(route) * 2} mins"
+        # Save latest dispatch
+        global LAST_DISPATCH
+        LAST_DISPATCH = {
+            "origin": origin,
+            "destination": destination,
+            "route": route,
+            "eta": eta
+        }
+        # STRUCTURED ALERT SYSTEM
+        alerts = []
+        ambulance_id = f"AMB-{len(ALERTS)+1:02d}"
+        alerts.append({
+            "type": "DISPATCH",
+            "message": f"{ambulance_id} dispatched from {origin} → {destination}",
+            "eta": eta
+        })
 
+        for loc in route:
+            alerts.append({
+                "type": "SIGNAL",
+                "message": f"Signal cleared at {loc}",
+                "location": loc
+            })
+
+        alerts.append({
+            "type": "ZONE",
+            "message": f"1km zone activated along route",
+            "coverage": route[:3]
+        })
+        ALERTS.extend(alerts)
         return jsonify({
             "success": True,
             "ambulance": "AMB-01",
             "route": route,
             "eta": eta,
             "signals": get_signals(route),
-            "zone": get_zone(origin),
+            "zone": get_zone(route),
+            "prediction": predict_next_action(route),
             "status": "dispatched"
         })
     except Exception as e:
@@ -101,6 +184,71 @@ def zone():
 
     return jsonify({
         "zone": get_zone(location)
+    })
+@app.route('/alerts', methods=['GET'])
+def get_alerts():
+    return jsonify({
+        "alerts": ALERTS[-20:]  # last 20 alerts
+    })
+#AI Assistant ADD
+@app.route('/ai', methods=['POST'])
+def ai_assistant():
+    try:
+        data = request.get_json()
+        message = data.get("message", "").lower()
+
+        # 🔥 CASE 1: LOCATION
+        if "location" in message:
+            return jsonify({
+                "response": "Location detected via frontend. Use map for precise view."
+            })
+
+        # 🔥 CASE 2: ROUTE
+        elif "route" in message or "fastest" in message:
+            if LAST_DISPATCH:
+                route = " → ".join(LAST_DISPATCH["route"])
+                eta = LAST_DISPATCH["eta"]
+                return jsonify({
+                    "response": f"Fastest route: {route} (ETA: {eta})"
+                })
+            else:
+                return jsonify({
+                    "response": "No active dispatch. Please simulate first."
+                })
+
+        # 🔥 CASE 3: CORRIDOR
+        elif "corridor" in message:
+            if LAST_DISPATCH:
+                return jsonify({
+                    "response": f"Active corridor from {LAST_DISPATCH['origin']} to {LAST_DISPATCH['destination']}"
+                })
+            else:
+                return jsonify({
+                    "response": "No active corridor."
+                })
+
+        # 🔥 CASE 4: SYSTEM WORKING
+        elif "how" in message or "work" in message:
+            return jsonify({
+                "response": "The system creates a moving 1km predictive zone, clears signals ahead, and optimizes ambulance routing in real-time."
+            })
+
+        # 🔥 DEFAULT
+        return jsonify({
+            "response": "Ask about route, corridor, or system."
+        })
+
+    except Exception as e:
+        print("AI ERROR:", str(e))
+        return jsonify({"response": "AI error"})      
+# SYSTEM STATS API:
+@app.route('/stats', methods=['GET'])
+def stats():
+    return jsonify({
+        "alerts": len(ALERTS),
+        "active_signals": 8,   # simulated count
+        "active_zones": 3,
+        "active_ambulance": "AMB-01"
     })
 @app.route('/health', methods=['GET'])
 def health():

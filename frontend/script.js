@@ -29,6 +29,7 @@ function detectLocation() {
   }
 }
 detectLocation();
+setInterval(fetchStats, 3000);
 
 // LIVE ALERT FEED ENGINE
 const LOCATIONS = ['MG Road','Brigade Rd','Residency Rd','Koramangala 5th Block','Indiranagar 100ft Rd','Jayanagar 4th Block','Silk Board Junction','Hebbal Flyover','Marathahalli Bridge','Richmond Circle','Lavelle Rd','Old Airport Rd','Bannerghatta Rd','Hosur Rd'];
@@ -148,21 +149,8 @@ function updateUnitCard(unit, origin, dest) {
 
 // Seed 6 initial alerts immediately
 for (let i = 0; i < 6; i++) pushAlert(false);
-
-// Fire live alerts at random intervals (3–7 seconds) — looks genuinely real
-function scheduleNext() {
-  const delay = Math.random() * 4000 + 3000;
-  setTimeout(() => { pushAlert(true); scheduleNext(); }, delay);
-}
-scheduleNext();
-
-// Also update the corridors/signals stats periodically
-setInterval(() => {
-  const sigs = document.getElementById('stat-signals');
-  if (sigs) { const v = parseInt(sigs.textContent)||47; sigs.textContent = v + Math.floor(Math.random()*2); }
-}, 8000);
-
-
+//scheduleNext();
+setInterval(fetchAlerts, 3000);
 // AI CHAT
 const conversations = [];
 let isTyping = false;
@@ -222,40 +210,44 @@ function hideTyping() {
 async function getAIResponse() {
   isTyping = true;
   showTyping();
-  try {
-    const userMessage = conversations[conversations.length - 1]?.content || '';
-    await new Promise(resolve => setTimeout(resolve, 350));
 
-    const lower = userMessage.toLowerCase();
-    let text = '';
-
-    if (lower.includes('location') || lower.includes('locate') || lower.includes('where am i')) {
-      text = `Your current detected location is ${locationStr}.`;
-    } else if (lower.includes('nearest hospital') || lower.includes('hospital') || lower.includes('route')) {
-      text = 'The fastest route depends on the live corridor state. Use the simulator to trigger a dispatch and I will show the active corridor path, ETA, and cleared signals.';
-    } else if (lower.includes('corridor') || lower.includes('signal')) {
-      text = 'Active corridor mode is enabled. The system uses infrastructure alerts first, then SMS fallback, then push notifications, with no driver app required for the core clearance flow.';
-    } else if (lower.includes('how does') || lower.includes('how it works') || lower.includes('system')) {
-      text = 'The system predicts a 1km clearance zone around the ambulance, then clears signals, activates acoustic and visual alerts, and falls back to SMS and push notifications if needed.';
-    } else {
-      text = 'I can help with your location, active corridor status, route analysis, or system behavior. Ask me for the nearest hospital, current location, or how the 1km clearance works.';
-    }
-
+  const userMessage = conversations[conversations.length - 1]?.content || '';
+  if (userMessage.toLowerCase().includes("location")) {
     hideTyping();
-    conversations.push({ role: 'assistant', content: text });
-
-    // Add location card if location query
-    if (lower.includes('location') || lower.includes('locate') || lower.includes('where am i')) {
-      const htmlContent = `${text}<div class="location-card"><div class="loc-label">YOUR LOCATION</div><div class="loc-val">${locationStr}</div></div>`;
-      appendMsg('ai', htmlContent, true);
-    } else {
-      appendMsg('ai', text);
-    }
-  } catch (e) {
-    hideTyping();
-    appendMsg('ai', 'Network error. Please check your connection and try again.');
-    console.error('Chat error:', e);
+    appendMsg('ai', `Your current location is ${locationStr}`);
+    isTyping = false;
+    return;
   }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000); // ⏱️ 3 sec timeout
+
+    const res = await fetch('http://172.18.19.14:5000/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userMessage }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    const data = await res.json();
+
+    hideTyping();
+    appendMsg('ai', data.response);
+
+  } catch (e) {
+    //FALLBACK (NO FREEZE)
+    hideTyping();
+
+    let text = "System uses AI-based routing and signal control.";
+
+    appendMsg('ai', text);
+
+    console.error("AI ERROR:", e);
+  }
+
   isTyping = false;
 }
 
@@ -310,7 +302,7 @@ async function runSimulation() {
     setProgress(5);
     await sleep(300);
 
-    const response = await fetch('http://127.0.0.1:5000/dispatch', {
+    const response = await fetch('http://172.18.19.14:5000/dispatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ origin, destination: dest, radius })
@@ -326,8 +318,36 @@ async function runSimulation() {
     await sleep(250);
 
     addLog(now(), 'ROUTE', `Route locked — ${data.route.join(' → ')}`, '', 'infra');
+    //make map react to REAL ROUTE
+    if(typeof window.mapReact === 'function') {
+      data.route.forEach(loc => {
+        window.mapReact('Infrastructure', loc);
+      });
+    }
     setProgress(40);
     await sleep(250);
+    // ✅ SHOW SIGNALS FROM BACKEND
+if (data.signals) {
+  data.signals.forEach(sig => {
+    addLog(now(), 'SIGNAL', `${sig.junction} → ${sig.signal}`, 'success', 'infra');
+        //map SIGNAL REACTION:
+        if (typeof window.mapReact === 'function') {
+          window.mapReact('Signals', sig.junction);
+        }
+  });
+}
+
+// SHOW ZONE FROM BACKEND
+if (data.zone) {
+  data.zone.forEach(z => {
+    addLog(now(), 'ZONE', `${z.center} → ${z.radius} (${z.priority})`, 'success', 'infra');
+
+    // map reaction
+    if (typeof window.mapReact === 'function') {
+      window.mapReact('Dispatch', z.center);
+    }
+  });
+}
 
     if (useInfra) {
       addLog(now(), 'INFRA', `Infrastructure corridor active in ${radius}`, 'success', 'infra');
@@ -354,6 +374,10 @@ async function runSimulation() {
     await sleep(200);
 
     addLog(now(), 'ETA', `Estimated arrival — ${data.eta}`, 'success', 'infra');
+    // SHOW PREDICTION
+    if (data.prediction) {
+      addLog(now(), 'AI', data.prediction, 'success', 'infra');
+    }
     setProgress(70);
     await sleep(200);
 
@@ -365,7 +389,7 @@ async function runSimulation() {
       updateUnitCard(data.ambulance, origin, dest);
     }
 
-    addLog(now(), 'RESULT', 'Dispatch synchronized with backend', 'success', 'infra');
+    addLog(now(), 'RESULT', 'Full system synchronized (route + signals + zone)', 'success', 'infra');
     setProgress(100);
   } catch (err) {
     console.error('Dispatch simulation failed:', err);
@@ -799,3 +823,54 @@ window.mapReact = function(layer, loc) {
 // Kick off map rendering
 greenifyAhead();
 requestAnimationFrame(drawMap);
+// -------------------------------
+// FETCH REAL ALERTS FROM BACKEND
+async function fetchAlerts() {
+  try {
+    const res = await fetch('http://172.18.19.14:5000/alerts');
+    const data = await res.json();
+
+    const feed = document.getElementById('live-feed');
+    if (!feed) return;
+
+    feed.innerHTML = '';
+
+    data.alerts.forEach(alert => {
+      const div = document.createElement('div');
+      div.className = 'alert-item-live';
+
+      let icon = '🚨';
+
+      if (alert.type === 'SIGNAL') icon = '🚦';
+      if (alert.type === 'ZONE') icon = '📍';
+
+      div.innerHTML = `
+        <div class="alert-icon green">${icon}</div>
+        <div>
+          <div class="alert-text">${alert.message}</div>
+        </div>
+      `;
+
+      feed.appendChild(div);
+    });
+
+  } catch (err) {
+    console.error("Alert fetch error:", err);
+  }
+}
+// FETCH REAL STATS:
+async function fetchStats() {
+  try {
+    const res = await fetch('http://172.18.19.14:5000/stats');
+    const data = await res.json();
+
+    const alertsEl = document.getElementById('stat-alerts');
+    const signalsEl = document.getElementById('stat-signals');
+
+    if (alertsEl) alertsEl.textContent = data.alerts;
+    if (signalsEl) signalsEl.textContent = data.active_signals;
+
+  } catch (err) {
+    console.error("Stats error:", err);
+  }
+}
