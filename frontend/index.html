@@ -43,11 +43,19 @@ nav {
 .nav-link:hover, .nav-link.active { background: var(--bg3); color: var(--green); }
 .nav-status { display: flex; align-items: center; gap: 6px; font-size: 12px; font-family: var(--mono); color: var(--green); background: rgba(29,158,117,0.1); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.5s ease-in-out infinite; }
-
 /* SECTIONS */
 section { display: none; padding-top: 56px; }
 section.active { display: block; }
 
+button {
+  padding: 16px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+
+body { margin: 0; }
+
+.container { padding: 10px; }
 /* HERO / DASHBOARD */
 .hero { padding: 48px 24px 24px; max-width: 1200px; margin: 0 auto; }
 .hero-title { font-size: 48px; font-weight: 700; letter-spacing: -2px; line-height: 1.1; margin-bottom: 8px; }
@@ -275,7 +283,110 @@ section.active { display: block; }
   .panels { grid-template-columns: 1fr; }
   .sys-grid { grid-template-columns: 1fr; }
   .hero-title { font-size: 32px; }
-  .nav-links { display: none; }
+  .nav-status {
+    display: none;
+  }
+  .nav-links { width: 100%; }
+  .nav-link { flex: 1 1 45%; padding: 10px; font-size: 14px; }
+  .nav-links button:last-child { flex: 1 1 100%; background: red; color: white; font-size: 18px; }
+}
+/* ---------------- FLOATING SOS BUTTON ---------------- */
+.fab-sos {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 65px;
+  height: 65px;
+  border-radius: 50%;
+  background: red;
+  color: white;
+  font-size: 28px;
+  border: none;
+  cursor: pointer;
+  z-index: 999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  /* 🔥 Pulse animation */
+  animation: pulse 1.5s infinite;
+}
+/* ---------------- MOBILE FULL FIX ---------------- */
+
+@media (max-width: 768px) {
+
+  /* Navbar */
+  nav {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .nav-links {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .nav-link {
+    flex: 1 1 45%;
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  /* Hide extra */
+  .nav-status {
+    display: none;
+  }
+
+  /* Dashboard cards */
+  .grid {
+    display: block;
+  }
+
+  .card {
+    margin-bottom: 10px;
+  }
+
+  /* Map */
+  canvas {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Text scaling */
+  h1 {
+    font-size: 22px;
+  }
+
+  p {
+    font-size: 12px;
+  }
+}
+/* Pulse effect */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,0,0,0.7); }
+  70% { box-shadow: 0 0 0 15px rgba(255,0,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,0,0,0); }
+}
+/* Tooltip label */
+.sos-label {
+  position: fixed;
+  bottom: 95px;
+  right: 20px;
+  background: black;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: none;
+  z-index: 999;
+}
+/* Prevent overlap */
+body {
+  padding-bottom: 90px;
 }
 </style>
 </head>
@@ -291,6 +402,8 @@ section.active { display: block; }
     <button class="nav-link" onclick="showSection('chat', event)">AI Assistant</button>
     <button class="nav-link" onclick="showSection('system', event)">System</button>
     <button class="nav-link" onclick="showSection('simulate', event)">Simulate</button>
+    <button class="fab-sos" id="sosBtn" onclick="handleSOS()">🚨</button>
+    <div id="sosLabel" class="sos-label">SOS</div>
   </div>
   <div class="nav-status">
     <div class="status-dot"></div>
@@ -526,5 +639,8 @@ section.active { display: block; }
 </section>
 
 <script src="script.js"></script>
+<audio id="sosSound" preload="auto">
+  <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
+</audio>
 </body>
 </html>

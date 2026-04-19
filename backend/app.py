@@ -2,7 +2,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import traceback
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    static_folder='../frontend',
+    template_folder='../frontend'
+)
 CORS(app)
 # ALERT STORAGE & dispatch tracking:
 ALERTS = []
@@ -16,6 +20,39 @@ CITY_MAP = {
     "MG Road": ["Jayanagar", "Indiranagar"],
     "Indiranagar": ["Koramangala", "MG Road"]
 }
+
+LOCATION_ALIASES = {
+    "koramangala": "Koramangala",
+    "silk board": "Silk Board",
+    "btm": "BTM",
+    "jayanagar": "Jayanagar",
+    "mg road": "MG Road",
+    "indiranagar": "Indiranagar",
+    "whitefield": "Indiranagar",
+    "manipal hospital": "Indiranagar",
+    "st. john's hospital": "Koramangala",
+    "st john's hospital": "Koramangala",
+    "fortis hospital": "Jayanagar",
+    "apollo hospital": "MG Road",
+    "victoria hospital": "MG Road",
+    "narayana health": "Silk Board"
+}
+
+def normalize_location(value):
+    if not value:
+        return value
+
+    text = str(value).strip()
+    lower_text = text.lower()
+
+    for needle, node in LOCATION_ALIASES.items():
+        if needle in lower_text:
+            return node
+
+    return text.split('(')[0].strip()
+
+def get_request_data():
+    return request.get_json(silent=True) or {}
 # ROUTE FINDING (BFS)
 def find_route(start, end):
     visited = set()
@@ -37,6 +74,7 @@ def find_route(start, end):
                 queue.append(new_path)
 
     return [start, end]  # fallback
+
 # AI DECISION ENGINE:
 def ai_signal_decision(distance):
     if distance == 0:
@@ -50,6 +88,9 @@ def ai_signal_decision(distance):
 
 # SMART SIGNAL + ZONE AWARE LOGIC
 def get_signals(route):
+    if not route:
+        return []
+
     signals = []
 
     # Get zone locations (first 3 points)
@@ -83,7 +124,7 @@ def get_signals(route):
     return signals
 # PREDICTIVE DECISION ENGINE
 def predict_next_action(route):
-    if len(route) < 2:
+    if not route or len(route) < 2:
         return "No prediction available"
 
     next_location = route[1]
@@ -92,6 +133,12 @@ def predict_next_action(route):
 # ZONE(1km RADIUS SIMULATION):-
 # # DYNAMIC ZONE SYSTEM
 def get_zone(route):
+    if route is None:
+        return []
+
+    if isinstance(route, str):
+        route = [route]
+
     zones = []
 
     for i, location in enumerate(route):
@@ -104,20 +151,25 @@ def get_zone(route):
             })
 
     return zones
-@app.route('/', methods=['GET'])
-def home():
-    return {"status": "Backend Running...", "version": "1.0.0"}
+from flask import send_from_directory
+
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.template_folder, 'index.html')
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory(app.static_folder, path)
 
 @app.route('/dispatch', methods=['POST'])
 def dispatch():
     try:
-        data = request.json
+        data = get_request_data()
 
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
-        origin = data.get("origin")
-        destination = data.get("destination")
+        origin = normalize_location(data.get("origin"))
+        destination = normalize_location(data.get("destination"))
 
         if not origin or not destination:
             return jsonify({"error": "Origin and destination are required"}), 400
@@ -156,7 +208,7 @@ def dispatch():
         ALERTS.extend(alerts)
         return jsonify({
             "success": True,
-            "ambulance": "AMB-01",
+            "ambulance": ambulance_id,
             "route": route,
             "eta": eta,
             "signals": get_signals(route),
@@ -171,7 +223,7 @@ def dispatch():
 
 @app.route('/signals', methods=['POST'])
 def signals():
-    data = request.json
+    data = get_request_data()
     route = data.get("route", [])
 
     return jsonify({
@@ -179,8 +231,8 @@ def signals():
     })
 @app.route('/zone', methods=['POST'])
 def zone():
-    data = request.json
-    location = data.get("location")
+    data = get_request_data()
+    location = normalize_location(data.get("location"))
 
     return jsonify({
         "zone": get_zone(location)
@@ -194,7 +246,7 @@ def get_alerts():
 @app.route('/ai', methods=['POST'])
 def ai_assistant():
     try:
-        data = request.get_json()
+        data = get_request_data()
         message = data.get("message", "").lower()
 
         # 🔥 CASE 1: LOCATION
@@ -263,4 +315,4 @@ def server_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True) 
