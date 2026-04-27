@@ -2,12 +2,16 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import traceback
 
-app = Flask(
-    __name__,
-    static_folder='../frontend',
-    template_folder='../frontend'
-)
+app = Flask(__name__)
 CORS(app)
+
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "Backend Running 🚀",
+        "message": "Green Corridor API is live"
+    })
+
 # ALERT STORAGE & dispatch tracking:
 ALERTS = []
 LAST_DISPATCH = {}
@@ -315,4 +319,4 @@ def server_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(host="0.0.0.0", port=8080)

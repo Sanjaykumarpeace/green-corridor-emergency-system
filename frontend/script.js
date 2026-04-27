@@ -19,10 +19,7 @@ function showSection(name, evt) {
 window.showSection = showSection;
 
 // ================= API =================
-const API_BASE =
-  window.location && window.location.protocol && window.location.protocol.startsWith('http')
-    ? window.location.origin
-    : 'http://127.0.0.1:5000';
+const API_BASE = "https://green-corridor-517286415682.asia-south1.run.app";
 
 // ================= LOCATION =================
 let userLocation = null;
